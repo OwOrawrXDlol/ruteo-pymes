@@ -1,0 +1,34 @@
+# Parámetros de operación y costo.
+# Cada valor dice si es REAL (dato de la empresa) o SUPUESTO (Tabla 5 del artículo).
+# Cuando la empresa entregue sus datos, cambia el valor y su etiqueta a "real".
+
+almacen:
+  lat: 20.1011            # supuesto: centro de Pachuca, cambiar por la dirección real del almacén
+  lon: -98.7591           # supuesto
+
+flota:
+  camionetas_propias: 4   # supuesto (Tabla 5)
+  capacidad_cajas: 110    # supuesto (Tabla 5): camioneta de 1.5 t
+  max_urgentes: 10        # supuesto: tope de fletes urgentes disponibles en un día
+
+tiempos:
+  jornada_h: 9            # supuesto (Tabla 5): incluye traslado y servicio
+  servicio_min: 6         # supuesto (Tabla 5): descarga y firma por parada
+  velocidad_kmh: 22       # supuesto (Tabla 5): velocidad urbana promedio
+
+distancias:
+  factor_circuidad: 1.30  # supuesto (Tabla 5): km por calle / km en línea recta
+
+costos:
+  costo_km: 4.20          # supuesto (Tabla 5), MXN/km: combustible y mantenimiento
+  costo_propia: 1100      # supuesto (Tabla 5), MXN/día por camioneta propia que sale
+  tarifa_reservada: 1500  # supuesto (Tabla 5), MXN/día, se paga aunque no se use
+  tarifa_urgente: 3200    # supuesto (Tabla 5), MXN/día, contratada el mismo día
+
+reserva:
+  q_alfa: 1.025           # supuesto (artículo, ec. 3): margen por error del pronóstico
+  u_max: 0.95             # supuesto (Tabla 5): llenado máximo alcanzable de una camioneta
+  semanas_historia: 4     # supuesto: semanas previas para el pronóstico sustituto
+
+solver:
+  segundos_por_dia: 4     # supuesto (Tabla 5): tiempo de búsqueda de OR-Tools por día
