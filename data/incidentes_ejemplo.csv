@@ -1,0 +1,7 @@
+nombre,lat,lon,tipo,radio_m,factor,cerrado
+Choque en el centro (zona Z1),20.1230,-98.7360,accidente,300,2.5,no
+Obra entre el almacén y la zona Z2,20.0945,-98.7620,obra,250,2.0,no
+Cierre en la salida al sur (hacia Z3),20.0855,-98.7495,cierre,250,1.0,sí
+Embotellamiento al oriente (hacia Z5),20.0980,-98.7345,embotellamiento,400,3.0,no
+Encharcamiento al norponiente (hacia Z4),20.1180,-98.7645,inundación,300,2.0,no
+Accidente fuera de la zona de reparto (control: no debe cambiar nada),20.2000,-98.6500,accidente,300,2.5,no

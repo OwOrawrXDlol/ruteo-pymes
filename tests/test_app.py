@@ -9,6 +9,11 @@ from src.load import valores_supuestos
 RAIZ = Path(__file__).resolve().parent.parent
 
 
+def boton(app, etiqueta):
+    """El botón con esa etiqueta (por posición cambiaría cada vez que se agrega uno)."""
+    return next(b for b in app.button if b.label == etiqueta)
+
+
 def test_lista_de_supuestos_del_config():
     supuestos = dict((p, v) for p, v, _ in valores_supuestos(RAIZ / "config.yaml"))
     assert supuestos["flota.capacidad_cajas"] == "110"
@@ -30,7 +35,7 @@ def test_app_calcula_un_rango():
     app.run()
     app.sidebar.slider[0].set_value(1).run()
     app.date_input[0].set_value(("2025-10-09", "2025-10-11")).run()
-    app.button[0].click().run()
+    boton(app, "Calcular rango").click().run()
     assert not app.exception
     assert any("brecha" in m.label for m in app.metric)
 
@@ -40,7 +45,7 @@ def test_pestana_kpi_muestra_rango_y_pronostico():
     app.run()
     app.sidebar.slider[0].set_value(1).run()
     app.date_input[0].set_value(("2025-10-09", "2025-10-11")).run()
-    app.button[0].click().run()
+    boton(app, "Calcular rango").click().run()
     assert not app.exception
     etiquetas = [m.label for m in app.metric]
     assert "WAPE del pronóstico (cajas/día)" in etiquetas

@@ -21,6 +21,18 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/streamlit run app.py
 ```
 
+## Recalcular con tráfico (pestaña 🚦, prueba de concepto)
+
+Funciona sin internet con **incidentes simulados** (clic en el mapa o lista de `data/incidentes_ejemplo.csv`).
+Para usar **TomTom en vivo** (opcional):
+
+1. Crea una cuenta gratuita en <https://developer.tomtom.com> y copia tu clave.
+2. Copia `.env.example` como `.env` y pon la clave: `TOMTOM_API_KEY=...`. El archivo `.env` no se comparte.
+3. Reinicia la app y elige "TomTom en vivo" en la barra lateral.
+
+El plan gratuito de TomTom da una cuota **mensual** por API (Routing 20,000; incidentes 2,500;
+Matrix 2,500). La app guarda cada consulta 5 minutos en `.cache_tomtom/` y muestra cuánto llevas usado.
+
 ## Carpetas
 
 | carpeta         | contenido                                                        |

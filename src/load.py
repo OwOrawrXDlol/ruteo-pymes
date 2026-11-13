@@ -95,16 +95,21 @@ def cargar_config(ruta="config.yaml"):
 
 def valores_supuestos(ruta="config.yaml"):
     """Lista de (parámetro, valor, comentario) de config.yaml marcados como supuesto."""
-    supuestos, seccion = [], ""
+    supuestos = []
+    secciones = []  # (sangría, nombre) de las secciones abiertas, p. ej. trafico > simulado
     for linea in Path(ruta).read_text(encoding="utf-8").splitlines():
         if not linea.strip() or linea.strip().startswith("#"):
             continue
+        sangria = len(linea) - len(linea.lstrip())
+        while secciones and secciones[-1][0] >= sangria:
+            secciones.pop()
         clave, _, resto = linea.partition(":")
         valor, _, comentario = resto.partition("#")
         if not valor.strip():  # encabezado de sección, p. ej. "flota:"
-            seccion = clave.strip()
+            secciones.append((sangria, clave.strip()))
         elif "supuesto" in comentario:
-            supuestos.append((f"{seccion}.{clave.strip()}", valor.strip(), comentario.strip()))
+            nombre = ".".join([s for _, s in secciones] + [clave.strip()])
+            supuestos.append((nombre, valor.strip(), comentario.strip()))
     return supuestos
 
 

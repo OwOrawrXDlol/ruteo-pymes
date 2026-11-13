@@ -15,6 +15,7 @@ tiempos:
   jornada_h: 9            # supuesto (Tabla 5): incluye traslado y servicio
   servicio_min: 6         # supuesto (Tabla 5): descarga y firma por parada
   velocidad_kmh: 22       # supuesto (Tabla 5): velocidad urbana promedio
+  hora_salida: "08:00"    # supuesto: hora a la que salen las camionetas del almacén
 
 distancias:
   factor_circuidad: 1.30  # supuesto (Tabla 5): km por calle / km en línea recta
@@ -32,3 +33,36 @@ reserva:
 
 solver:
   segundos_por_dia: 4     # supuesto (Tabla 5): tiempo de búsqueda de OR-Tools por día
+
+trafico:
+  # Valores por omisión de un incidente simulado (modo B). No son datos medidos: solo sirven para la demo.
+  simulado:
+    radio_m: 300            # supuesto: un tramo a menos de esta distancia del incidente queda afectado
+    factor: 2.5             # supuesto: un tramo afectado tarda 2.5 veces más
+    minutos_cerrado: 1000   # supuesto: tiempo de un tramo cerrado (más que la jornada, así no se usa)
+  # Criterios para decidir qué camionetas reoptimizar (TRAFICO.md). Valores iniciales razonables,
+  # no calibrados con datos de la empresa.
+  umbral_retraso_pct: 15        # supuesto: retraso mínimo, en % del manejo sin tráfico que le falta...
+  umbral_retraso_min: 10        # supuesto: ...y además al menos estos minutos (se piden las dos)
+  magnitud_minima: 3            # supuesto: incidente "mayor" en la escala 0-4 de TomTom
+  radio_incidente_m: 300        # supuesto: incidente a menos de esto de un tramo pendiente cuenta
+  mejora_minima_min: 5          # supuesto: el plan nuevo se adopta solo si ahorra al menos esto
+  segundos_reoptimizar: 2       # supuesto: tiempo de búsqueda de OR-Tools al reoptimizar
+
+tomtom:
+  # Modo A (tráfico en vivo). La clave va en .env como TOMTOM_API_KEY (ver .env.example).
+  minutos_cache: 5              # supuesto (TRAFICO.md): reusar la misma consulta durante 5 min
+  modo_viaje: car               # supuesto: "van" está en beta en TomTom y Matrix no lo acepta
+  max_transacciones_matrix: 500 # supuesto: tope por cálculo, para no gastar la cuota del mes en uno
+  margen_bbox_km: 1             # supuesto: margen del recuadro en que se buscan incidentes
+  radio_estimado_m: 150         # supuesto: alcance de un incidente al estimar tramos que TomTom no midió
+  factor_por_magnitud:          # supuesto: lentitud estimada según la magnitud del incidente
+    0: 1.2                      # supuesto: desconocida
+    1: 1.2                      # supuesto: menor
+    2: 1.5                      # supuesto: moderada
+    3: 2.5                      # supuesto: mayor
+    4: 2.5                      # supuesto: indefinida (los cierres se tratan como tramo cerrado)
+  limite_mensual:               # dato de TomTom: plan gratuito (docs.tomtom.com/pricing, revisado 12/11/2026)
+    routing: 20000            # real (dato publicado por TomTom, no de la empresa)
+    incidentes: 2500          # real (dato publicado por TomTom, no de la empresa)
+    matrix: 2500              # real (dato publicado por TomTom, no de la empresa)

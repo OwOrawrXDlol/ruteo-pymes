@@ -17,6 +17,8 @@ from src.scenarios import (
     ESCENARIOS, brecha_cerrada, escenarios_dia, escenarios_rango, kpis_pronostico, reserva_del_dia,
     resumir, tabla_kpis,
 )
+import vista_trafico
+from src.tomtom import ClienteTomTom, leer_clave
 
 RAIZ = Path(__file__).parent
 RUTA_CONFIG = RAIZ / "config.yaml"
@@ -222,6 +224,19 @@ fecha = st.sidebar.selectbox("Fecha", fechas, index=len(fechas) - 1,
                              format_func=lambda f: etiqueta_fecha(f, datos["paradas"]))
 escenario = st.sidebar.radio("Escenario del mapa", ESCENARIOS, index=2, format_func=lambda e: NOMBRES[e])
 
+# Fuente de tráfico para la pestaña 🚦 (TomTom solo si hay clave en .env)
+st.sidebar.divider()
+clave_tomtom = leer_clave(RAIZ / ".env")
+fuentes = {"simulado": "Incidente simulado (sin internet)", "tomtom": "TomTom en vivo"}
+modo_trafico = st.sidebar.radio("Fuente de tráfico", list(fuentes) if clave_tomtom else ["simulado"],
+                                format_func=fuentes.get,
+                                help="Solo afecta la pestaña 🚦 Tráfico. El modo simulado no necesita internet.")
+if not clave_tomtom:
+    st.sidebar.caption("⚠️ TomTom en vivo está deshabilitado: falta `TOMTOM_API_KEY` en `.env` "
+                       "(copia `.env.example`).")
+cliente_tomtom = (ClienteTomTom(clave_tomtom, RAIZ / ".cache_tomtom", config["tomtom"]["minutos_cache"],
+                                config["tomtom"]["modo_viaje"]) if clave_tomtom else None)
+
 # Avisos visibles
 supuestos = valores_supuestos(RUTA_CONFIG)
 with st.sidebar.expander(f"⚠️ {len(supuestos)} valores de config.yaml son supuestos"):
@@ -240,8 +255,8 @@ with st.spinner(f"Calculando rutas del {fecha:%d/%m/%Y} ({segundos} s por cada b
 for aviso in avisos_dia:
     st.warning(aviso)
 
-pestana_dia, pestana_comparacion, pestana_kpi = st.tabs(
-    ["🗺️ Rutas del día", "📊 Comparación de escenarios", "📈 KPI"])
+pestana_dia, pestana_trafico, pestana_comparacion, pestana_kpi = st.tabs(
+    ["🗺️ Rutas del día", "🚦 Tráfico", "📊 Comparación de escenarios", "📈 KPI"])
 
 with pestana_dia:
     r = resultados[escenario]
@@ -267,6 +282,14 @@ with pestana_dia:
                       returned_objects=[], key=f"mapa-{fecha}-{escenario}")
             st.dataframe(tabla_camionetas(paradas, r["rutas"], config["flota"]["capacidad_cajas"]),
                          hide_index=True, column_config=FORMATO)
+
+with pestana_trafico:
+    # Se replanean las rutas del escenario del mapa; si no tiene rutas (E1 real), las de E2
+    base = escenario if resultados.get(escenario) and resultados[escenario]["rutas"] else "E2"
+    st.subheader(f"Recalcular con tráfico — {etiqueta_fecha(fecha, datos['paradas'])}")
+    vista_trafico.mostrar(paradas, resultados[base], NOMBRES[base], config, f"{clave_datos}-{fecha}-{base}",
+                          COLORES, RAIZ / "data" / "incidentes_ejemplo.csv",
+                          modo=modo_trafico, cliente=cliente_tomtom)
 
 with pestana_comparacion:
     st.subheader(f"Día {fecha:%d/%m/%Y}")
