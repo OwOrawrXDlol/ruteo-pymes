@@ -48,12 +48,22 @@ def test_rezagos_solo_usan_el_pasado():
     assert np.isnan(t.loc[(date(2025, 3, 3), "Z1", "manana"), "rezago_1"])
 
 
-def test_pedidos_sin_hora_o_sin_zona_dan_error_claro():
+def test_sin_hora_se_pronostica_el_dia_completo_y_sin_zona_el_total():
     pedidos, clientes = pedidos_chicos()
-    with pytest.raises(ValueError, match="hora"):
-        panel(pedidos.assign(time=""), clientes)
-    with pytest.raises(ValueError, match="zona"):
-        panel(pedidos, clientes.assign(zone=""))
+    t = panel(pedidos.assign(time=""), clientes.assign(zone=""))
+    assert set(t["franja"]) == {"dia"} and set(t["zone"]) == {"sin zona"}
+    assert t["y"].sum() == len(pedidos) and len(t) == 3  # 3 días × 1 zona × 1 franja
+
+
+def test_periodos_automaticos():
+    from src.forecast import periodos_automaticos
+    fechas = pd.date_range("2025-01-06", "2025-06-28", freq="D")
+    p = periodos_automaticos(fechas, semanas_prueba=4, semanas_validacion=4)
+    assert p["prueba"] == (date(2025, 6, 1), date(2025, 6, 28))
+    assert p["validacion"] == (date(2025, 5, 4), date(2025, 5, 31))
+    assert p["entrenamiento"][0] == date(2025, 2, 10)  # 5 semanas de historial para los rezagos
+    with pytest.raises(ValueError, match="al menos 21 semanas"):
+        periodos_automaticos(pd.date_range("2025-01-06", "2025-03-30"), 4, 4)
 
 
 def test_temporadas():
@@ -112,3 +122,19 @@ def test_el_error_por_dia_es_mucho_menor_que_por_celda(resultado):
 def test_se_elige_por_validacion(resultado):
     m = resultado["metricas"].set_index("modelo")
     assert resultado["elegido"] == m.loc[MODELOS, "wape_validacion"].idxmin()
+
+
+def test_datos_dispersos_no_dejan_huecos_en_el_historial():
+    # Una empresa que solo trabaja algunos días: el "mismo día de la semana" casi nunca existe
+    fechas = pd.date_range("2025-01-02", periods=60, freq="3D")
+    pedidos = pd.DataFrame({"date": fechas.date, "time": "", "client_id": "a"})
+    t = variables(panel(pedidos, pd.DataFrame({"client_id": ["a"], "zone": ["Z1"]})))
+    assert t["prom_4sem"].iloc[1:].notna().all()
+
+
+def test_periodo_sin_pedidos_da_mensaje_claro():
+    from src.forecast import pronosticar
+    pedidos, clientes = pedidos_chicos()
+    t = variables(panel(pedidos, clientes))
+    with pytest.raises(ValueError, match="días con pedidos"):
+        pronosticar(t, (date(2025, 3, 3), date(2025, 3, 4)), (date(2026, 1, 1), date(2026, 1, 31)))

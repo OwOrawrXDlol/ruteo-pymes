@@ -24,13 +24,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.forecast import ENTRENAMIENTO, MODELOS, NOMBRES, evaluar, guardar
+from src.forecast import ENTRENAMIENTO, MODELOS, NOMBRES, evaluar, guardar, zonas_de
 from src.load import cargar_config
 
 
 def cajas_por_pedido(pedidos, clientes, rango=ENTRENAMIENTO):
     """Promedio de cajas por pedido de cada zona en el periodo dado."""
-    p = pedidos.merge(clientes[["client_id", "zone"]], on="client_id")
+    p = pedidos.drop(columns=["zone"], errors="ignore").assign(zone=pedidos["client_id"].map(zonas_de(clientes)))
     fechas = pd.to_datetime(p["date"]).dt.date
     p = p[(fechas >= rango[0]) & (fechas <= rango[1])]
     return p.groupby("zone")["boxes"].mean()
@@ -81,7 +81,7 @@ def planear_reservas(pedidos, clientes, config, resultado):
     resultado: lo que devuelve forecast.evaluar.
     """
     modelo = modelo_a_usar(config, resultado["elegido"])
-    cajas_zona = cajas_por_pedido(pedidos, clientes)
+    cajas_zona = cajas_por_pedido(pedidos, clientes, resultado.get("periodos", {}).get("entrenamiento", ENTRENAMIENTO))
     reales = cajas_reales_por_dia(pedidos)
     alfa = fractil_critico(config)
     q_alfa = calibrar_q_alfa(reales, cajas_por_dia(resultado["validacion"], modelo, cajas_zona), alfa)

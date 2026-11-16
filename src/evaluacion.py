@@ -76,6 +76,17 @@ def tabla_escenarios(detalle, config):
     return t
 
 
+def _wilcoxon(a, b):
+    """p de la prueba de Wilcoxon, o None si hay muy pocos días distintos para que tenga sentido."""
+    diferentes = int(((a - b).abs() > 1e-9).sum())
+    if diferentes < 6:
+        return None
+    try:
+        return float(wilcoxon(a, b).pvalue)
+    except ValueError:
+        return None
+
+
 def _por_dia(detalle, columna):
     """Tabla día × escenario de una columna."""
     return detalle.pivot(index="date", columns="escenario", values=columna)
@@ -122,9 +133,9 @@ def analizar(detalle, config):
         "dias_E3_mayor": int((dif > 1).sum()),
         "sobrecosto_E3_mayor": float(dif[dif > 1].sum()),
         "dias_km_E2_menor": int((km["E2"] < km["E1"] - 1e-6).sum()),
-        "wilcoxon_km_E1_E2": float(wilcoxon(km["E1"], km["E2"]).pvalue),
-        "wilcoxon_costo_E2_E3": float(wilcoxon(costo["E2"], costo["E3"]).pvalue),
-        "viernes": {
+        "wilcoxon_km_E1_E2": _wilcoxon(km["E1"], km["E2"]),
+        "wilcoxon_costo_E2_E3": _wilcoxon(costo["E2"], costo["E3"]),
+        "viernes": None if not viernes.any() else {
             "dias": int(viernes.sum()),
             "costo_dia_E1": float(costo.loc[viernes, "E1"].mean()),
             "costo_dia_E3": float(costo.loc[viernes, "E3"].mean()),

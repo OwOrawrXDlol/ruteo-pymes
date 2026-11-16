@@ -38,19 +38,26 @@ def test_patrones_sin_hora_no_fallan():
 def test_pestana_con_el_caso_de_estudio():
     app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=300)
     app.run()
-    assert app.sidebar.radio[0].value == "Caso de estudio simulado (artículo)"
+    assert app.sidebar.radio[0].value == "Caso de estudio (demostración)"
     assert not app.exception
     assert app.tabs[0].label == "💰 Ahorro"
-    etiquetas = {m.label: m for m in app.metric}
-    assert etiquetas["Ahorro frente a la práctica actual"].value.startswith("$")
-    assert "→" in etiquetas["Contrataciones urgentes"].value
-    assert any("caso de estudio simulado" in w.value and "no de una empresa" in w.value for w in app.warning)
+    etiquetas = {m.label: m for m in app.tabs[0].metric}
+    assert etiquetas["Ahorro en 103 días"].value.startswith("$")
+    assert "→" in etiquetas["Fletes urgentes"].value
+    # Avisos de honestidad: demostración con simulación y resultados con los parámetros del artículo
+    captions = [c.value for c in app.caption]
+    assert any("caso de estudio" in c and "simulación" in c for c in captions)
+    assert any("parámetros del artículo" in c for c in captions)
+    # Una gráfica de costo por escenario y el mapa antes/después, a la vista; lo demás plegado en "Ver detalle"
+    assert any(m.value.startswith("#### Antes y después") for m in app.tabs[0].markdown)
+    assert sum(e.label.startswith("Ver detalle") for e in app.tabs[0].expander) >= 5
     # Tabla de modelos de pronóstico con el elegido marcado
     modelos = next(d.value for d in app.dataframe if "WAPE validación" in d.value.columns)
     assert modelos["Modelo"].str.contains("✔").sum() == 1
 
 
-def test_pestana_con_datos_de_ejemplo_explica_que_falta():
+def test_pestana_con_datos_de_ejemplo_explica_que_falta_historia():
+    # Los datos de ejemplo tienen 6 semanas: no alcanzan para entrenar, validar y probar
     app = app_de_ejemplo(300)
     assert not app.exception
-    assert any("Caso de estudio simulado" in i.value for i in app.info)
+    assert any("Hace falta un historial" in w.value for w in app.warning)

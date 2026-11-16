@@ -28,7 +28,7 @@ Para usar **TomTom en vivo** (opcional):
 
 1. Crea una cuenta gratuita en <https://developer.tomtom.com> y copia tu clave.
 2. Copia `.env.example` como `.env` y pon la clave: `TOMTOM_API_KEY=...`. El archivo `.env` no se comparte.
-3. Reinicia la app y elige "TomTom en vivo" en la barra lateral.
+3. Reinicia la app y elige "TomTom en vivo" en la pestaña 🚦 Tráfico (demo).
 
 El plan gratuito de TomTom da una cuota **mensual** por API (Routing 20,000; incidentes 2,500;
 Matrix 2,500). La app guarda cada consulta 5 minutos en `.cache_tomtom/` y muestra cuánto llevas usado.
@@ -39,7 +39,7 @@ Matrix 2,500). La app guarda cada consulta 5 minutos en `.cache_tomtom/` y muest
 |-----------------|------------------------------------------------------------------|
 | `src/`          | código: carga, distancias, ruteo, escenarios                     |
 | `data/`         | datos reales de la empresa (cuando lleguen)                      |
-| `data/ejemplo/` | datos **inventados** para probar (ver `data/ejemplo/LEEME.md`)   |
+| `data/ejemplo/` | datos **inventados** que usan las pruebas (ver `data/ejemplo/LEEME.md`) |
 | `docs/`         | artículo de referencia, guía del proyecto y explicación          |
 | `tests/`        | pruebas automáticas (pytest)                                     |
 | `config.yaml`   | parámetros de costo y operación; cada uno dice si es real o supuesto |

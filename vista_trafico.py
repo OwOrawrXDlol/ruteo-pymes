@@ -15,6 +15,7 @@ from src.replan import (CAMBIAR, MANTENER, URGENTE, estados_a_la_hora, horario, 
                         replanear, replanear_con_tomtom, resumen_costos, texto_hora, tramos)
 from src.tomtom import APIS, ErrorTomTom
 from src.traffic import TIPOS_INCIDENTE, Incidente, cargar_incidentes, trafico_simulado
+from interfaz import dinero
 
 ICONOS = {"accidente": "💥", "obra": "🚧", "cierre": "⛔", "embotellamiento": "🚗",
           "inundación": "🌊", "otro": "⚠️", "carril cerrado": "🚧", "niebla": "🌫️", "lluvia": "🌧️",
@@ -151,7 +152,7 @@ def dibujar_mapa(paradas, config, plan, estados, trafico, resultado, colores):
         for orden, n in enumerate(nueva, start=1):
             p = paradas.iloc[n - 1]
             folium.CircleMarker(punto(n), radius=7, color=color, fill=True, fill_opacity=0.9,
-                                tooltip=f"{nombre} · pendiente {orden}: {p.client_id} ({p.boxes} cajas)").add_to(mapa)
+                                tooltip=f"{nombre} · pendiente {orden}: {p.client_id} ({p.boxes} {config.get('negocio', {}).get('unidad', 'cajas')})").add_to(mapa)
         # Dónde va la camioneta (simulado)
         if estado.en_ruta and actual:
             folium.Marker(punto(estado.inicio), tooltip=f"{nombre}: posición simulada",
@@ -161,7 +162,7 @@ def dibujar_mapa(paradas, config, plan, estados, trafico, resultado, colores):
     for i in (resultado or {}).get("no_atendidas", []):
         p = paradas.iloc[i]
         folium.CircleMarker((p.lat, p.lon), radius=9, color="black", weight=3, fill=True, fill_color=ROJO,
-                            fill_opacity=1, tooltip=f"REQUIERE URGENTE: {p.client_id} ({p.boxes} cajas)").add_to(mapa)
+                            fill_opacity=1, tooltip=f"REQUIERE URGENTE: {p.client_id} ({p.boxes} {config.get('negocio', {}).get('unidad', 'cajas')})").add_to(mapa)
 
     for inc in trafico.incidentes:
         if inc.puntos and len(inc.puntos) > 1:  # TomTom: el tramo de calle afectado
@@ -259,11 +260,13 @@ def panel_tomtom(cliente, config):
 
 
 def mostrar(paradas, escenario, nombre_escenario, config, clave, colores, ruta_ejemplo,
-            modo="simulado", cliente=None):
+            modo="simulado", cliente=None, lugar_aviso=None):
     """Dibuja la pestaña. escenario: resultado del escenario cuyas rutas se replanean.
 
     modo: "simulado" (incidentes puestos a mano) o "tomtom" (necesita `cliente`).
+    lugar_aviso: dónde va el aviso único de prueba de concepto (por omisión, arriba de todo).
     """
+    lugar_aviso = lugar_aviso or st.container()
     en_vivo = modo == "tomtom"
     plan = {"rutas": escenario["rutas"]}
     lats, lons, _, minutos = puntos_del_dia(paradas, config)
@@ -317,15 +320,15 @@ def mostrar(paradas, escenario, nombre_escenario, config, clave, colores, ruta_e
     if vigente:
         trafico = vigente[3]
 
-    # Aviso fijo (TRAFICO.md)
-    if en_vivo:
-        consulta = f" (consultado a las {trafico.consultado:%H:%M})" if vigente and trafico.consultado else ""
-        st.warning(f"**Prueba de concepto:** posición de camionetas simulada; tráfico de **TomTom en vivo**"
-                   f"{consulta}. La cobertura de tráfico de TomTom en Pachuca puede ser limitada.")
-    else:
-        st.warning("**Prueba de concepto:** posición de camionetas simulada; tráfico de **incidente simulado**.")
-    st.caption(f"Se replanean las rutas de **{nombre_escenario}**. No es un sistema en tiempo real: "
-               "no hay GPS de las camionetas ni app para el chofer.")
+    # Aviso único (TRAFICO.md): se escribe arriba, en el lugar reservado
+    sin_gps = "posición de camionetas simulada (no hay GPS ni app para el chofer; no es un sistema en tiempo real)"
+    with lugar_aviso:
+        if en_vivo:
+            consulta = f" (consultado a las {trafico.consultado:%H:%M})" if vigente and trafico.consultado else ""
+            st.warning(f"**Prueba de concepto:** {sin_gps}; tráfico de **TomTom en vivo**{consulta}. La cobertura de "
+                       "tráfico de TomTom en Pachuca puede ser limitada.")
+        else:
+            st.warning(f"**Prueba de concepto:** {sin_gps}; tráfico de **incidente simulado**.")
 
     with izquierda:
         st.caption(f"🕗 {texto_hora(salida + transcurrido)} · línea punteada = plan actual · sólida = plan "
@@ -342,7 +345,8 @@ def mostrar(paradas, escenario, nombre_escenario, config, clave, colores, ruta_e
         st.rerun()
 
     if guardado and not vigente:
-        st.info("Cambiaste la hora, la fuente o los incidentes: presiona **Recalcular con tráfico** para actualizar.")
+        st.caption("⏳ Cambiaste la hora, la fuente o los incidentes: presiona **Recalcular con tráfico** para "
+                   "actualizar.")
     if not vigente:
         if not en_vivo and not _incidentes():
             st.caption("Agrega uno o más incidentes y presiona **Recalcular con tráfico**.")
@@ -361,10 +365,10 @@ def mostrar(paradas, escenario, nombre_escenario, config, clave, colores, ruta_e
     c[2].metric("Requieren urgente", int((decisiones == URGENTE).sum()),
                 f"+{costos['urgentes_extra']} unidad(es)" if costos["urgentes_extra"] else None,
                 delta_color="inverse")
-    c[3].metric("Km del día", f"{despues['km']:.1f}", f"{despues['km'] - antes['km']:+.1f} km",
-                delta_color="inverse", help=f"Antes: {antes['km']:.1f} km")
-    c[4].metric("Costo del día", f"${despues['costo']:,.0f}", f"{despues['costo'] - antes['costo']:+,.0f} MXN",
-                delta_color="inverse", help=f"Antes: ${antes['costo']:,.0f}")
+    c[3].metric("Km del día", f"{despues['km']:,.1f}", f"{despues['km'] - antes['km']:+.1f} km",
+                delta_color="inverse", help=f"Antes: {antes['km']:,.1f} km")
+    c[4].metric("Costo del día", dinero(despues["costo"]), f"{despues['costo'] - antes['costo']:+,.0f} MXN",
+                delta_color="inverse", help=f"Antes: {dinero(antes['costo'])}")
     st.dataframe(tabla_decision(resultado), hide_index=True, column_config=FORMATO_TABLA)
     st.caption("Costo = costo por km × km + costo propia × propias + tarifa reservada × reservadas + "
                "tarifa urgente × urgentes. Las paradas que requieren urgente se rutean aparte con tiempos "

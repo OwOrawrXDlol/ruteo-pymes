@@ -67,22 +67,63 @@ def franja_de(horas):
     return np.where(horas.str[:2].astype(int) < HORA_CORTE, "manana", "tarde")
 
 
+SIN_ZONA = "sin zona"
+DIA_COMPLETO = "dia"
+
+
+def zonas_de(clientes):
+    """Zona de cada cliente (client_id → zona). Los clientes sin zona quedan en "sin zona"."""
+    zona = clientes.get("zone", pd.Series("", index=clientes.index)).fillna("").astype(str).str.strip()
+    return pd.Series(zona.where(zona != "", SIN_ZONA).to_numpy(), index=clientes["client_id"])
+
+
+def tiene_horas(pedidos):
+    """True si todos los pedidos traen hora (HH:MM): entonces se pronostica por franja."""
+    return "time" in pedidos and pedidos["time"].fillna("").astype(str).str.match(r"^\d{1,2}:\d{2}").all()
+
+
 def panel(pedidos, clientes):
     """Pedidos por zona, día y franja, con ceros donde no hubo pedidos.
 
-    pedidos: date (fecha), time (HH:MM), client_id. clientes: client_id, zone.
+    pedidos: date (fecha), time (HH:MM, opcional), client_id. clientes: client_id, zone (opcional).
     Los días son los que aparecen en los pedidos (días operativos).
+    Si algún pedido no trae hora se pronostica el día completo (franja "dia"); si los clientes no
+    traen zona, todos van en "sin zona" (se pronostica el total).
     """
-    p = pedidos.merge(clientes[["client_id", "zone"]], on="client_id", how="left")
-    if p["zone"].isna().any() or (p["zone"] == "").any():
-        raise ValueError("Para pronosticar por zona, todos los clientes necesitan zona en clientes.csv.")
-    if "time" not in p or (p["time"].fillna("") == "").any():
-        raise ValueError("Para pronosticar por franja, todos los pedidos necesitan hora (columna time).")
-    p = p.assign(date=pd.to_datetime(p["date"]).dt.date, franja=franja_de(p["time"].astype(str)))
+    p = pedidos.drop(columns=["zone"], errors="ignore").copy()
+    p["zone"] = p["client_id"].map(zonas_de(clientes))
+    if p["zone"].isna().any():
+        raise ValueError("Hay pedidos de clientes que no están en clientes.csv.")
+    franjas = FRANJAS if tiene_horas(p) else (DIA_COMPLETO,)
+    franja = franja_de(p["time"].astype(str)) if franjas == FRANJAS else DIA_COMPLETO
+    p = p.assign(date=pd.to_datetime(p["date"]).dt.date, franja=franja)
     conteo = p.groupby(["date", "zone", "franja"]).size()
-    indice = pd.MultiIndex.from_product([sorted(p["date"].unique()), sorted(p["zone"].unique()), FRANJAS],
+    indice = pd.MultiIndex.from_product([sorted(p["date"].unique()), sorted(p["zone"].unique()), franjas],
                                         names=["date", "zone", "franja"])
     return conteo.reindex(indice, fill_value=0).rename("y").reset_index()
+
+
+def periodos_automaticos(fechas, semanas_prueba=4, semanas_validacion=4, semanas_minimas=8):
+    """Periodos de entrenamiento, validación y prueba a partir de las fechas de una PYME.
+
+    La prueba son las últimas `semanas_prueba` semanas; la validación, las `semanas_validacion` anteriores;
+    el entrenamiento, todo lo anterior salvo las primeras 5 semanas (que solo sirven de historial).
+    """
+    fechas = sorted(pd.to_datetime(pd.Series(list(fechas))).dt.date.unique())
+    inicio, fin = fechas[0], fechas[-1]
+    prueba = (fin - timedelta(weeks=semanas_prueba) + timedelta(days=1), fin)
+    validacion = (prueba[0] - timedelta(weeks=semanas_validacion), prueba[0] - timedelta(days=1))
+    entrena = (inicio + timedelta(weeks=5), prueba[0] - timedelta(days=1))
+    semanas_para_entrenar = (validacion[0] - entrena[0]).days / 7
+    if semanas_para_entrenar < semanas_minimas:
+        hace_falta = 5 + semanas_minimas + semanas_validacion + semanas_prueba
+        tiene = ((fin - inicio).days + 1) / 7
+        raise ValueError(f"Hace falta un historial de al menos {hace_falta} semanas para pronosticar y evaluar "
+                         f"(se tienen {tiene:.0f}). Prueben con menos semanas de prueba o suban más historia.")
+    return {"entrenamiento": entrena, "validacion": validacion, "prueba": prueba}
+
+
+PERIODOS_ARTICULO = {"entrenamiento": ENTRENAMIENTO, "validacion": VALIDACION, "prueba": PRUEBA}
 
 
 # --- Variables ---
@@ -130,6 +171,9 @@ def variables(tabla):
     t["rezago_1"] = grupo.shift(1)  # el día operativo anterior
     t["media_6"] = grupo.transform(lambda s: s.shift(1).rolling(6, min_periods=1).mean())
     t["prom_4sem"] = t[["_hace7", "_hace14", "_hace21", "_hace28"]].mean(axis=1)
+    # Si la empresa no trabaja todos los días, puede no haber "mismo día de la semana" en las 4 semanas
+    # anteriores: entonces se usa el promedio de los últimos días con datos
+    t["prom_4sem"] = t["prom_4sem"].fillna(t["media_6"])
     t["rezago_7"] = t["_hace7"].fillna(t["prom_4sem"])
     t["rezago_14"] = t["_hace14"].fillna(t["prom_4sem"])
     t["rezago_364"] = t["_hace364"].fillna(t["prom_4sem"])  # el primer año no tiene año anterior
@@ -169,7 +213,13 @@ def pronosticar(t, entrena, predice):
     """Entrena con el rango `entrena` y pronostica el rango `predice`. Devuelve una columna por modelo."""
     base = _entre(t, (min(t["date"]), entrena[1]))
     base = base[base["date"] >= entrena[0]].dropna(subset=["rezago_1", "prom_4sem"])
+    if len(base) < 20:
+        raise ValueError("No hay suficientes días con pedidos para entrenar el pronóstico "
+                         f"({base['date'].nunique()} días antes de {entrena[1]:%d/%m/%Y}). Suban más historial.")
     objetivo = _entre(t, predice).copy()
+    if objetivo.empty:
+        raise ValueError(f"No hay días con pedidos entre el {predice[0]:%d/%m/%Y} y el {predice[1]:%d/%m/%Y}, "
+                         "así que no se puede validar ni probar ahí. Cambien las semanas o suban más historial.")
     # Referencias sin aprendizaje
     objetivo["ingenuo"] = objetivo["rezago_7"]
     objetivo["prom4"] = objetivo["prom_4sem"]
@@ -221,17 +271,22 @@ def sesgo_mensual(prueba, columna):
 
 # --- Todo junto ---
 
-def evaluar(pedidos, clientes, tasa_real=None):
-    """Entrena, valida y prueba los cinco modelos. Devuelve un diccionario con todo lo necesario."""
+def evaluar(pedidos, clientes, tasa_real=None, periodos=None):
+    """Entrena, valida y prueba los cinco modelos. Devuelve un diccionario con todo lo necesario.
+
+    periodos: {"entrenamiento", "validacion", "prueba"} → (inicio, fin). Si no se dan, los del artículo.
+    """
+    periodos = periodos or PERIODOS_ARTICULO
+    entrena, valida, prueba_rango = periodos["entrenamiento"], periodos["validacion"], periodos["prueba"]
     t = variables(panel(pedidos, clientes))
 
-    # Validación: modelo entrenado hasta junio de 2025, evaluado en julio y agosto
-    validacion = pronosticar(t, (ENTRENAMIENTO[0], VALIDACION[0] - timedelta(days=1)), VALIDACION)
+    # Validación: modelo entrenado hasta antes de la validación (en el artículo: hasta junio de 2025)
+    validacion = pronosticar(t, (entrena[0], valida[0] - timedelta(days=1)), valida)
     wape_val = {c: metricas(validacion["y"], validacion[c])["wape"] for c in MODELOS}
     elegido = min(wape_val, key=wape_val.get)
 
     # Prueba: modelo entrenado con todo el periodo de entrenamiento
-    prueba = pronosticar(t, ENTRENAMIENTO, PRUEBA)
+    prueba = pronosticar(t, entrena, prueba_rango)
     columnas = list(MODELOS)
     if tasa_real is not None:
         tasa = tasa_real.assign(date=pd.to_datetime(tasa_real["date"]).dt.date)
@@ -244,6 +299,7 @@ def evaluar(pedidos, clientes, tasa_real=None):
         "prueba": prueba[["date", "zone", "franja", "y"] + columnas],
         "validacion": validacion[["date", "zone", "franja", "y"] + MODELOS],
         "sesgo_mensual": sesgo_mensual(prueba, elegido),
+        "periodos": periodos,
     }
 
 

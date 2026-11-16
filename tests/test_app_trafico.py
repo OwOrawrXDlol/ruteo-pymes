@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from tests.conftest import app_de_ejemplo
+from tests.conftest import abrir, app_de_ejemplo
 
 from src.replan import estados_a_la_hora, puntos_del_dia, replanear, resumen_costos
 from src.scenarios import costo_dia
@@ -99,8 +99,11 @@ def test_tabla_de_decision_y_mapa():
 def test_pestana_trafico_recalcula_con_incidentes_de_ejemplo():
     app = app_de_ejemplo(300)
     app.sidebar.slider[0].set_value(1).run()
+    abrir(app, "🚦 Tráfico (demo)")
     assert not app.exception
-    assert any("Prueba de concepto" in w.value for w in app.warning)
+    # Un solo aviso en la pestaña: prueba de concepto, posición simulada y que no es tiempo real
+    avisos = [w.value for w in app.tabs[3].warning]
+    assert len(avisos) == 1 and "Prueba de concepto" in avisos[0] and "no es un sistema en tiempo real" in avisos[0]
 
     # Agregar todos los incidentes de ejemplo y recalcular a las 8:30
     app.multiselect[0].set_value(app.multiselect[0].options).run()
@@ -115,7 +118,7 @@ def test_pestana_trafico_recalcula_con_incidentes_de_ejemplo():
 
     # Si cambia la hora, el resultado anterior ya no se muestra como vigente
     next(s for s in app.slider if s.label.startswith("Hora actual")).set_value(time(9, 0)).run()
-    assert any("presiona **Recalcular con tráfico**" in i.value for i in app.info)
+    assert any("presiona **Recalcular con tráfico**" in c.value for c in app.caption)
 
 
 # --- Modo TomTom en la app (sin internet: respuestas falsas, caché en carpeta temporal) ---
@@ -123,10 +126,10 @@ def test_pestana_trafico_recalcula_con_incidentes_de_ejemplo():
 def test_sin_clave_tomtom_queda_deshabilitado(monkeypatch):
     monkeypatch.delenv("TOMTOM_API_KEY", raising=False)
     monkeypatch.setattr("src.tomtom.load_dotenv", lambda *a, **k: False)  # no leer un .env real
-    app = app_de_ejemplo(300)
-    radio = next(r for r in app.sidebar.radio if r.label == "Fuente de tráfico")
+    app = abrir(app_de_ejemplo(300), "🚦 Tráfico (demo)")
+    radio = app.radio(key="fuente_trafico")
     assert radio.options == ["Incidente simulado (sin internet)"]
-    assert any("TomTom en vivo está deshabilitado" in c.value for c in app.sidebar.caption)
+    assert any("TomTom en vivo está deshabilitado" in c.value for c in app.caption)
 
 
 def test_modo_tomtom_consulta_y_muestra_el_contador(monkeypatch, tmp_path):
@@ -143,7 +146,8 @@ def test_modo_tomtom_consulta_y_muestra_el_contador(monkeypatch, tmp_path):
 
     app = app_de_ejemplo(300)
     app.sidebar.slider[0].set_value(1).run()
-    next(r for r in app.sidebar.radio if r.label == "Fuente de tráfico").set_value("tomtom").run()
+    abrir(app, "🚦 Tráfico (demo)")
+    app.radio(key="fuente_trafico").set_value("tomtom").run()
     assert not app.exception
     contador = next(d for d in app.dataframe if "Gratis al mes" in d.value.columns).value
     assert list(contador["Hoy"]) == [0, 0, 0]

@@ -1,0 +1,31 @@
+# Perfil de EJEMPLO: transporte de ganado hacia un rancho (Rancho Ramada, Cardel, Veracruz).
+# Solo muestra cómo se adapta la app a otro negocio. Lo que no dijo la empresa son SUPUESTOS de ejemplo.
+nombre: "Transporte de ganado (ejemplo: Rancho Ramada)"
+descripcion: >
+  Jaulas de ganado que salen del rancho a recoger animales en varios lugares de carga y regresan.
+  El almacén es Rancho Ramada (Carretera Cardel-Veracruz km 226, Cardel, Ver.); las coordenadas son las
+  del centro de José Cardel según OpenStreetMap, no el punto exacto. Cada viaje real llena una jaula,
+  así que con estos datos el ruteo casi no tiene qué consolidar: úsenlo para ver cómo se configura, no
+  para esperar ahorros.
+config:
+  almacen:
+    lat: 19.3712              # supuesto: centro de José Cardel (OpenStreetMap), no el punto exacto del rancho
+    lon: -96.3775             # supuesto
+  negocio:
+    unidad: cabezas           # real: lo que reparte la empresa
+    unidad_singular: cabeza   # real
+  flota:
+    camionetas_propias: 3     # real: 3 jaulas propias
+    capacidad_cajas: 80       # supuesto: tope de 24 t por jaula; se usa el máximo de cabezas por viaje en los datos (68 a 80)
+    max_urgentes: 5           # supuesto
+  tiempos:
+    jornada_h: 36             # supuesto: un viaje de ida y vuelta de más de 1,000 km dura más de un día
+    servicio_min: 60          # supuesto: carga de la jaula en el lugar de carga
+    velocidad_kmh: 100        # real: tope del gobernador; el promedio real depende del camino
+  distancias:
+    factor_circuidad: 1.27    # supuesto: razón entre los km de los datos y la línea recta (1.26 a 1.28)
+  costos:
+    costo_km: 25              # supuesto: sin dato (los costos por viaje que dio la empresa no son proporcionales a los km)
+    costo_propia: 5000        # supuesto: sin dato
+    tarifa_reservada: 17000   # supuesto: sin dato; punto medio de los $16,000-18,000 que dio la empresa para varias zonas
+    tarifa_urgente: 25500     # supuesto: sin dato; 1.5 veces la reservada

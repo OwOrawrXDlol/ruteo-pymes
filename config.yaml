@@ -69,3 +69,8 @@ tomtom:
     routing: 20000            # real (dato publicado por TomTom, no de la empresa)
     incidentes: 2500          # real (dato publicado por TomTom, no de la empresa)
     matrix: 2500              # real (dato publicado por TomTom, no de la empresa)
+
+negocio:
+  # Qué reparte la empresa: se muestra en pantalla en vez de "cajas" (los archivos siguen usando la columna boxes)
+  unidad: cajas           # supuesto: lo que se reparte (cajas, cabezas, kilos, paquetes...)
+  unidad_singular: caja   # supuesto
