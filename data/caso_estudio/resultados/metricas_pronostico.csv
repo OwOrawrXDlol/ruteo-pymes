@@ -1,0 +1,7 @@
+modelo,nombre,mae,rmse,wape,sesgo,wape_diario,wape_viernes,wape_validacion
+ingenuo,Ingenuo estacional (t−7),3.1264,4.2589,0.5908,0.0114,0.2411,0.6298,0.5772
+prom4,Promedio 4 semanas,2.5145,3.3893,0.4752,-0.0085,0.1937,0.4689,0.4781
+ridge,Regresión Ridge,2.2712,3.0724,0.4292,-0.0508,0.1477,0.4312,0.4426
+gboost,Gradient boosting,2.3133,3.1084,0.4371,-0.0277,0.1524,0.413,0.4426
+bosque,Bosque aleatorio,2.3137,3.1262,0.4372,-0.0035,0.1589,0.437,0.4497
+oraculo,Oráculo (tasa real del simulador),2.2026,2.9515,0.4162,0.0269,0.1417,0.4087,

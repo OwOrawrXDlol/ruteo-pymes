@@ -31,6 +31,9 @@ reserva:
   u_max: 0.95             # supuesto (Tabla 5): llenado máximo alcanzable de una camioneta
   semanas_historia: 4     # supuesto: semanas previas para el pronóstico sustituto
 
+pronostico:
+  modelo: auto            # supuesto: "auto" = el de menor error en validación (artículo); o ridge, bosque, gboost, prom4, ingenuo
+
 solver:
   segundos_por_dia: 4     # supuesto (Tabla 5): tiempo de búsqueda de OR-Tools por día
 

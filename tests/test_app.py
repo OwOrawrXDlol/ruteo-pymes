@@ -4,6 +4,8 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
+from tests.conftest import app_de_ejemplo
+
 from src.load import valores_supuestos
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -21,8 +23,7 @@ def test_lista_de_supuestos_del_config():
 
 
 def test_app_abre_con_datos_de_ejemplo():
-    app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=120)
-    app.run()
+    app = app_de_ejemplo(120)
     app.sidebar.slider[0].set_value(1).run()
     assert not app.exception
     assert any("datos de ejemplo inventados" in w.value for w in app.warning)
@@ -31,8 +32,7 @@ def test_app_abre_con_datos_de_ejemplo():
 
 
 def test_app_calcula_un_rango():
-    app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=300)
-    app.run()
+    app = app_de_ejemplo(300)
     app.sidebar.slider[0].set_value(1).run()
     app.date_input[0].set_value(("2025-10-09", "2025-10-11")).run()
     boton(app, "Calcular rango").click().run()
@@ -41,8 +41,7 @@ def test_app_calcula_un_rango():
 
 
 def test_pestana_kpi_muestra_rango_y_pronostico():
-    app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=300)
-    app.run()
+    app = app_de_ejemplo(300)
     app.sidebar.slider[0].set_value(1).run()
     app.date_input[0].set_value(("2025-10-09", "2025-10-11")).run()
     boton(app, "Calcular rango").click().run()

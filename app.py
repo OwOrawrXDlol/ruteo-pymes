@@ -17,6 +17,7 @@ from src.scenarios import (
     ESCENARIOS, brecha_cerrada, escenarios_dia, escenarios_rango, kpis_pronostico, reserva_del_dia,
     resumir, tabla_kpis,
 )
+import vista_ahorro
 import vista_trafico
 from src.tomtom import ClienteTomTom, leer_clave
 
@@ -24,6 +25,7 @@ RAIZ = Path(__file__).parent
 RUTA_CONFIG = RAIZ / "config.yaml"
 CARPETA_REAL = RAIZ / "data"
 CARPETA_EJEMPLO = RAIZ / "data" / "ejemplo"
+CARPETA_CASO = RAIZ / "data" / "caso_estudio"
 ARCHIVOS = ["pedidos.csv", "clientes.csv", "operacion_real.csv", "reserva.csv"]
 
 NOMBRES = {
@@ -57,17 +59,31 @@ def leer_carpeta(carpeta):
     return {n: (carpeta / n).read_bytes() if (carpeta / n).exists() else None for n in ARCHIVOS}
 
 
+AVISO_EJEMPLO = "Estás viendo **datos de ejemplo inventados**, no datos de una empresa."
+AVISO_CASO = ("Estás viendo el **caso de estudio simulado** del artículo (560 clientes, 8 zonas, 2 años de pedidos "
+              "generados por simulación), **no datos de una empresa**.")
+
+
 def elegir_fuente():
-    """Barra lateral: de dónde vienen los datos. Devuelve ({archivo: bytes}, es_ejemplo) o (None, _)."""
-    opciones = ["Datos de ejemplo (inventados)", "Subir archivos"]
+    """Barra lateral: de dónde vienen los datos.
+
+    Devuelve ({archivo: bytes}, aviso, carpeta) o (None, None, None). El aviso es el texto que se muestra cuando los
+    datos son simulados o de ejemplo, y None cuando vienen de una empresa o de archivos subidos.
+    """
+    opciones = []
     if (CARPETA_REAL / "pedidos.csv").exists():
-        opciones.insert(0, "Datos de la empresa (carpeta data/)")
+        opciones.append("Datos de la empresa (carpeta data/)")
+    if (CARPETA_CASO / "pedidos.csv").exists():
+        opciones.append("Caso de estudio simulado (artículo)")
+    opciones += ["Datos de ejemplo (inventados)", "Subir archivos"]
     origen = st.sidebar.radio("Datos", opciones)
 
+    if origen.startswith("Caso de estudio"):
+        return leer_carpeta(CARPETA_CASO), AVISO_CASO, CARPETA_CASO
     if origen.startswith("Datos de ejemplo"):
-        return leer_carpeta(CARPETA_EJEMPLO), True
+        return leer_carpeta(CARPETA_EJEMPLO), AVISO_EJEMPLO, CARPETA_EJEMPLO
     if origen.startswith("Datos de la empresa"):
-        return leer_carpeta(CARPETA_REAL), False
+        return leer_carpeta(CARPETA_REAL), None, CARPETA_REAL
 
     contenidos = {}
     for nombre in ARCHIVOS:
@@ -75,8 +91,8 @@ def elegir_fuente():
         archivo = st.sidebar.file_uploader(nombre + (" (opcional)" if opcional else ""), type="csv", key=nombre)
         contenidos[nombre] = archivo.getvalue() if archivo else None
     if contenidos["pedidos.csv"] is None or contenidos["clientes.csv"] is None:
-        return None, False
-    return contenidos, False
+        return None, None, None
+    return contenidos, None, None
 
 
 def etiqueta_fecha(fecha, paradas):
@@ -202,7 +218,7 @@ st.title("🚚 Ruteo de última milla para PYMES")
 
 config = cargar_config(RUTA_CONFIG)
 
-contenidos, es_ejemplo = elegir_fuente()
+contenidos, aviso_datos, carpeta_datos = elegir_fuente()
 if contenidos is None:
     st.info("Sube al menos **pedidos.csv** y **clientes.csv** en la barra lateral.")
     st.stop()
@@ -241,8 +257,8 @@ cliente_tomtom = (ClienteTomTom(clave_tomtom, RAIZ / ".cache_tomtom", config["to
 supuestos = valores_supuestos(RUTA_CONFIG)
 with st.sidebar.expander(f"⚠️ {len(supuestos)} valores de config.yaml son supuestos"):
     st.dataframe(pd.DataFrame(supuestos, columns=["Parámetro", "Valor", "Nota"]), hide_index=True)
-if es_ejemplo:
-    st.warning("Estás viendo **datos de ejemplo inventados**, no datos de una empresa.")
+if aviso_datos:
+    st.warning(aviso_datos)
 if supuestos:
     st.caption(f"⚠️ {len(supuestos)} parámetros de costo y operación son supuestos del artículo "
                "(ver barra lateral). Los resultados cambian cuando se reemplacen por datos reales.")
@@ -255,8 +271,12 @@ with st.spinner(f"Calculando rutas del {fecha:%d/%m/%Y} ({segundos} s por cada b
 for aviso in avisos_dia:
     st.warning(aviso)
 
-pestana_dia, pestana_trafico, pestana_comparacion, pestana_kpi = st.tabs(
-    ["🗺️ Rutas del día", "🚦 Tráfico", "📊 Comparación de escenarios", "📈 KPI"])
+pestana_ahorro, pestana_dia, pestana_trafico, pestana_comparacion, pestana_kpi = st.tabs(
+    ["💰 Ahorro", "🗺️ Rutas del día", "🚦 Tráfico", "📊 Comparación de escenarios", "📈 KPI"])
+
+with pestana_ahorro:
+    vista_ahorro.mostrar(vista_ahorro.cargar_resultados(carpeta_datos), config, datos,
+                         lambda f: calcular_dia(datos, clave_datos, f, config, segundos), dibujar_mapa, NOMBRES)
 
 with pestana_dia:
     r = resultados[escenario]

@@ -7,6 +7,8 @@ import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from tests.conftest import app_de_ejemplo
+
 from src.replan import estados_a_la_hora, puntos_del_dia, replanear, resumen_costos
 from src.scenarios import costo_dia
 from src.traffic import Incidente, trafico_simulado
@@ -95,8 +97,7 @@ def test_tabla_de_decision_y_mapa():
 # --- La app ---
 
 def test_pestana_trafico_recalcula_con_incidentes_de_ejemplo():
-    app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=300)
-    app.run()
+    app = app_de_ejemplo(300)
     app.sidebar.slider[0].set_value(1).run()
     assert not app.exception
     assert any("Prueba de concepto" in w.value for w in app.warning)
@@ -122,8 +123,7 @@ def test_pestana_trafico_recalcula_con_incidentes_de_ejemplo():
 def test_sin_clave_tomtom_queda_deshabilitado(monkeypatch):
     monkeypatch.delenv("TOMTOM_API_KEY", raising=False)
     monkeypatch.setattr("src.tomtom.load_dotenv", lambda *a, **k: False)  # no leer un .env real
-    app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=300)
-    app.run()
+    app = app_de_ejemplo(300)
     radio = next(r for r in app.sidebar.radio if r.label == "Fuente de tráfico")
     assert radio.options == ["Incidente simulado (sin internet)"]
     assert any("TomTom en vivo está deshabilitado" in c.value for c in app.sidebar.caption)
@@ -141,8 +141,7 @@ def test_modo_tomtom_consulta_y_muestra_el_contador(monkeypatch, tmp_path):
     monkeypatch.setattr(ClienteTomTom, "__init__",
                         lambda self, clave, carpeta, *a, **k: original(self, clave, tmp_path / "cache", *a, **k))
 
-    app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=300)
-    app.run()
+    app = app_de_ejemplo(300)
     app.sidebar.slider[0].set_value(1).run()
     next(r for r in app.sidebar.radio if r.label == "Fuente de tráfico").set_value("tomtom").run()
     assert not app.exception
