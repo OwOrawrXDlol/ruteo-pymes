@@ -282,6 +282,32 @@ st.title("🚚 Ruteo de última milla para PYMES")
 st.markdown("**Pronostica los pedidos de mañana, reserva fletes a tiempo y arma rutas más cortas**, y compara cuánto "
             "cuesta frente a como se reparte hoy.")
 
+PESTANAS = ["💰 Ahorro", "🗺️ Rutas de un día", "📂 Mis datos", "🚦 Tráfico (demo)", "🐄 Rancho Ramada"]
+# Controles de la barra lateral que se conservan mientras se ve 🐄 Rancho Ramada (allí no se dibujan)
+CLAVES_BARRA = {"origen_datos", "perfil_elegido", "segundos", "semanas_prueba", "semanas_validacion", "segundos_ahorro"}
+
+
+def es_de_la_barra(clave):
+    """Claves de la barra lateral: las fijas y las de "Mi empresa" ("perfil|flota.capacidad_cajas")."""
+    if clave in CLAVES_BARRA:
+        return True
+    partes = str(clave).split("|", 1)
+    return len(partes) == 2 and (partes[1] in vista_config.NUMERICOS or partes[1] in vista_config.TEXTOS)
+
+
+if st.session_state.get("pestana") == PESTANAS[4]:
+    # 🐄 Rancho Ramada tiene sus propios datos y parámetros: la barra lateral muestra los del rancho. Los
+    # controles de las otras pestañas no se dibujan, pero sus valores se vuelven a guardar para no perderlos.
+    for clave in [c for c in list(st.session_state.keys()) if es_de_la_barra(c)]:
+        st.session_state[clave] = st.session_state[clave]
+    vista_ganadero.barra_lateral()
+    pestanas = st.tabs(PESTANAS, key="pestana", on_change="rerun")
+    with pestanas[4]:
+        vista_ganadero.pagina()
+    with pestanas[2]:   # se dibuja igual que siempre para no perder los archivos subidos
+        vista_datos.pagina((CARPETA_REAL / "pedidos.csv").exists())
+    st.stop()
+
 config_base = cargar_config(RUTA_CONFIG)  # los valores de config.yaml (los del artículo)
 origen = elegir_origen()
 # Parámetros de la empresa: parten de config.yaml o de un perfil y se pueden cambiar desde la barra lateral
@@ -291,14 +317,8 @@ UN, UN1 = config["negocio"]["unidad"], config["negocio"]["unidad_singular"]  # p
 lugar_encabezado = st.container()  # el aviso único; se llena cuando ya se sabe qué datos se usan
 
 # Pestañas "perezosas": solo se calcula la que está abierta (las rutas de un día tardan unos segundos)
-PESTANAS = ["💰 Ahorro", "🗺️ Rutas de un día", "📂 Mis datos", "🚦 Tráfico (demo)", "🐄 Rancho Ramada"]
 pestana_ahorro, pestana_dia, pestana_datos, pestana_trafico, pestana_rancho = st.tabs(
     PESTANAS, key="pestana", on_change="rerun")
-
-# 🐄 Rancho Ramada no depende de los datos de las demás pestañas: se dibuja antes de revisarlos
-if pestana_rancho.open:
-    with pestana_rancho:
-        vista_ganadero.pagina()
 
 # 📂 Mis datos se dibuja siempre, para que los archivos subidos no se pierdan al cambiar de pestaña
 with pestana_datos:

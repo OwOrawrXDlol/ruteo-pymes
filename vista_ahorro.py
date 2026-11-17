@@ -151,8 +151,8 @@ def cifras_principales(a, t):
     c = st.columns(4)
     c[0].metric(f"Ahorro en {a['dias']} días", dinero(a["ahorro_E3_vs_E1_mxn"]),
                 f"{pct(a['costo_E3_vs_E1'])} del costo", delta_color="inverse",
-                help=f"{NOMBRES['E1']}: {dinero(t.loc['E1', 'costo_total'])} → {NOMBRES['E3']}: "
-                     f"{dinero(t.loc['E3', 'costo_total'])}")
+                help=(f"{NOMBRES['E1']}: {dinero(t.loc['E1', 'costo_total'])} → {NOMBRES['E3']}: "
+                      f"{dinero(t.loc['E3', 'costo_total'])}").replace("$", r"\$"))
     c[1].metric("Kilómetros recorridos", km(t.loc["E2", "km_total"]),
                 f"{pct(a['km_E2_vs_E1'])} con rutas optimizadas", delta_color="inverse",
                 help=f"{NOMBRES['E1']}: {km(t.loc['E1', 'km_total'])}. La propuesta recorre casi lo mismo que "
@@ -180,7 +180,7 @@ def mapa_antes_despues(resultados, config, datos, calcular_dia, dibujar_mapa, es
     e1, e3 = fila.loc["E1"], fila.loc["E3"]
     st.caption(f"{int(e1['cajas'])} {config['negocio']['unidad']} · km {e1['km']:,.1f} → {e3['km']:,.1f} "
                f"({pct((e3['km'] / e1['km'] - 1) * 100)}) · urgentes {int(e1['urgentes'])} → {int(e3['urgentes'])} · "
-               f"costo del día {dinero(e1['costo'])} → {dinero(e3['costo'])}")
+               f"costo del día {dinero(e1['costo'])} → {dinero(e3['costo'])}".replace("$", r"\$"))
 
     with st.spinner("Dibujando las rutas de ese día (unos 15 s la primera vez)..."):
         dia, _ = calcular_dia(dia_mapa, config)

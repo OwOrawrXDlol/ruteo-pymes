@@ -184,9 +184,9 @@ def test_comparacion_completa():
     assert pron["elegido"] in g.MODELOS_SEMANA
     assert 0.2 < pron["frac_corto"] < 0.6
     costo = {e: g.costo_total(res[e]["indicadores"]) for e in res}
-    assert costo["I"] <= costo["B"] <= costo["A"] + 1          # B nunca peor que A en este ejemplo
+    assert costo["D"] <= costo["B"] <= costo["A"] + 1          # B nunca peor que A en este ejemplo
     # Sin juntar lotes, los fletes cuestan lo mismo: cada OC es un viaje del mismo precio
-    assert len({res[e]["indicadores"]["Costo de fletes ($)"] for e in "ABI"}) == 1
+    assert len({res[e]["indicadores"]["Costo de fletes ($)"] for e in "ABD"}) == 1
 
 
 # --- Parte 5: ruteo (juntar dos lotes chicos) ---
@@ -270,3 +270,148 @@ def test_pestana_rancho_ramada():
     # Volver a los valores base
     app.tabs[4].button(key="g_restablecer").click().run()
     assert not any(c.value.startswith("Parámetros ajustados") for c in app.tabs[4].caption)
+
+
+# --- Mejoras (docs/Mejoras_programa_Rancho_Ramada.pdf) ---
+
+def abrir_rancho():
+    from streamlit.testing.v1 import AppTest
+    from conftest import abrir
+    app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=240)
+    app.run()
+    abrir(app, "🐄 Rancho Ramada")
+    assert not app.exception
+    return app
+
+
+def test_textos_con_pesos_no_se_vuelven_formula():
+    # Cambio 1: dos $ en un mismo texto de Markdown se leen como LaTeX; deben ir escapados (\$)
+    app = abrir_rancho()
+    t = app.tabs[4]
+    textos = [c.value for c in t.caption] + [m.value for m in t.markdown] + [i.value for i in t.info]
+    for texto in textos:
+        sin_escapar = texto.replace(r"\$", "")
+        assert "$" not in sin_escapar, texto
+
+
+def test_escenario_d_y_costos_en_la_tabla():
+    # Cambios 3 y 6: D · Información perfecta aparece, y la tabla trae los costos y el ahorro contra A
+    app = abrir_rancho()
+    tabla = next(d.value for d in app.tabs[4].dataframe if "Costo total" in d.value.index)
+    assert list(tabla.columns) == ["A · Actual", "B · Pronóstico", "C · Pronóstico + ruteo", "D · Información perfecta"]
+    for fila in ("Costo total", "Ahorro contra A", "Costo de fletes", "Costo de merma"):
+        assert fila in tabla.index
+    assert tabla.loc["Ahorro contra A", "A · Actual"] == "—"
+
+
+def test_aviso_cuando_b_es_igual_a_a():
+    # Cambio 4: con los valores base B = A y se explica; con sobrecosto de urgencia B ya actúa y no hay aviso
+    app = abrir_rancho()
+    avisos = [i.value for i in app.tabs[4].info]
+    assert any("sale igual que hoy" in a for a in avisos)
+    app.tabs[4].slider(key="g_sobrecosto").set_value(17_000).run()
+    assert not any("sale igual que hoy" in i.value for i in app.tabs[4].info)
+
+
+def test_merma_con_delta_y_colores():
+    # Cambio 7: Merma con su delta en pesos; retraso y merma en rojo cuando suben (delta_color inverse)
+    app = abrir_rancho()
+    metricas = {m.label: m for m in app.tabs[4].metric}
+    assert metricas["Merma"].delta.startswith(("+$", "-$"))
+    for nombre in ("Días de retraso", "Merma"):        # los dos suben con los valores base: deben ir en rojo
+        assert metricas[nombre].delta.startswith("+")
+        assert "GREEN" not in str(metricas[nombre].proto)     # el rojo es el valor 0 del proto y no se imprime
+    assert "GREEN" in str(metricas["Viajes"].proto)           # bajan los viajes: verde
+
+
+def test_tabla_de_modelos_en_porcentaje():
+    # Cambio 8: la tabla del pronóstico ya no trae "WAPE por origen" y los valores van × 100
+    app = abrir_rancho()
+    t = next(d.value for d in app.tabs[4].dataframe if "Modelo" in d.value.columns)
+    assert "WAPE por origen" not in t.columns
+    assert t["WAPE semanal (prueba)"].between(1, 100).all()
+
+
+def test_combinaciones_del_mapa():
+    # Cambio 9: los viajes con dos lotes se agrupan por combinación de orígenes
+    import vista_ganadero as v
+    res = v.calcular(tuple(sorted(g.BASE.items())), None)
+    juntas = v.combinaciones(res)
+    assert sum(juntas.values()) == res["C"]["indicadores"]["Viajes con 2 puntos de carga"]
+    assert any(n > 1 for n in juntas.values())          # hay combinaciones repetidas
+
+
+def test_barra_lateral_del_rancho_y_se_conservan_los_controles():
+    # Cambio 10: en la pestaña del rancho la barra lateral muestra al rancho; al salir, los controles vuelven
+    from streamlit.testing.v1 import AppTest
+    from conftest import abrir
+    app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=240)
+    app.run()
+    app.sidebar.radio(key="origen_datos").set_value("Mis datos").run()
+    abrir(app, "🐄 Rancho Ramada")
+    textos = " ".join(c.value for c in app.sidebar.caption)
+    assert "3 jaulas propias" in textos and "camionetas" not in textos
+    abrir(app, "🗺️ Rutas de un día")
+    assert app.sidebar.radio(key="origen_datos").value == "Mis datos"
+
+
+def test_validar_ordenes_de_la_empresa():
+    # Cambio 11: el archivo de la empresa se revisa y se deja como el de ejemplo
+    buena = pd.DataFrame({"OC_ID": ["A1", "A2"], "Origen": ["balancan", "Palenque"], "Cabezas": [80, 32],
+                          "Fecha_embarque": ["2026-10-26", "28/10/2026"], "Días aviso": [8, 2]})
+    o, problemas = g.validar_ordenes(buena)
+    assert problemas == []
+    assert list(o["origen"]) == ["Balancán", "Palenque/Ocosingo"]
+    assert list(o["flete_mxn"]) == [45_000, 18_000]
+    assert o.loc[1, "fecha_aviso"] == date(2026, 10, 26)
+    mala = pd.DataFrame({"oc_id": ["A1", "A1"], "origen": ["Monterrey", "Balancán"], "cabezas": [120, 80],
+                         "fecha_embarque": ["2026-10-26", "2026-10-27"], "dias_aviso": [3, 3]})
+    o, problemas = g.validar_ordenes(mala)
+    assert o is None
+    texto = " ".join(problemas)
+    assert "Monterrey" in texto and "cabezas" in texto and "repetidos" in texto
+    assert g.validar_ordenes(pd.DataFrame({"oc_id": [1]}))[1][0].startswith("Faltan columnas")
+
+
+def test_pocas_semanas_usan_el_pronostico_sustituto():
+    # Con las 4 semanas de órdenes que tiene hoy el sistema del rancho no se pueden entrenar los modelos
+    o = g.del_periodo(g.generar_ordenes(), date(2026, 10, 5), 4)
+    inicio, semanas = g.periodo_de(o)
+    assert (inicio, semanas) == (date(2026, 10, 19), 2)
+    res, pron = g.comparar(o)
+    assert pron["sustituto"] and pron["elegido"] == "prom_hist"
+    assert res["A"]["indicadores"]["OCs"] == len(g.del_periodo(o, inicio, semanas))
+    assert g.periodo_de(g.generar_ordenes()) == (g.INICIO_EVALUACION, 52)
+
+
+def test_subir_ordenes_de_la_empresa_en_la_pantalla():
+    app = abrir_rancho()
+    o = g.del_periodo(g.generar_ordenes(), date(2026, 10, 5), 4)
+    csv = o.drop(columns=["fecha_aviso", "flete_mxn", "proveedor"]).to_csv(index=False).encode()
+    app.tabs[4].file_uploader(key="g_archivo").upload("ordenes.csv", csv, "text/csv")
+    app.run()
+    assert not app.exception
+    t = app.tabs[4]
+    assert any(c.value.startswith(f"Con las órdenes de la empresa ({len(o)} órdenes)") for c in t.caption)
+    assert next(m.label for m in t.metric) == "Costo del periodo"
+    # La merma medida reemplaza a la barra
+    t.number_input(key="g_merma_medida").set_value(1.5).run()
+    assert any("Merma medida por la empresa 1.50 %" in c.value for c in app.tabs[4].caption)
+
+
+def test_descargas():
+    # Cambio 12: tabla, mapa (PNG y HTML), logo y foto
+    import vista_ganadero as v
+    res = v.calcular(tuple(sorted(g.BASE.items())), None)
+    assert v.mapa_png(res)[:8] == b"\x89PNG\r\n\x1a\n"
+    app = abrir_rancho()
+    etiquetas = [b.label for b in app.tabs[4].get("download_button")]
+    assert etiquetas == ["Escenarios (CSV)", "Mapa de rutas (PNG)", "Mapa interactivo (HTML)", "Logo", "Foto del ganado"]
+
+
+def test_calendario_en_espanol():
+    # Cambio 2: el eje de días del calendario se arma en español (Vega pondría "Mon 03")
+    app = abrir_rancho()
+    specs = [str(c.proto.spec) for c in app.tabs[4].get("vega_lite_chart")]
+    calendarios = [s for s in specs if "recurso" in s]
+    assert calendarios and all("'lun'" in s and "day(datum.value)" in s for s in calendarios)

@@ -21,6 +21,7 @@ Cada valor dice si es DATO de la empresa o SUPUESTO.
 """
 
 import math
+import unicodedata
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -156,6 +157,76 @@ def leer_ordenes(ruta):
     for columna in ("fecha_aviso", "fecha_embarque"):
         ordenes[columna] = pd.to_datetime(ordenes[columna]).dt.date
     return ordenes
+
+
+def _sin_acentos(texto):
+    texto = unicodedata.normalize("NFKD", str(texto).strip().lower())
+    return "".join(c for c in texto if not unicodedata.combining(c))
+
+
+# Cómo puede venir escrito cada origen en el archivo de la empresa
+ALIAS_ORIGEN = {_sin_acentos(n): n for n in FLETE} | {
+    "palenque": "Palenque/Ocosingo", "ocosingo": "Palenque/Ocosingo", "palenque / ocosingo": "Palenque/Ocosingo",
+    "medellin de bravo": "Medellín", "tenosique de pino suarez": "Tenosique", "centro": "Villahermosa",
+}
+
+
+def validar_ordenes(tabla):
+    """Revisa un archivo de órdenes de la empresa y lo deja como el de ejemplo.
+
+    Columnas obligatorias: oc_id, origen, cabezas, fecha_embarque, y fecha_aviso o dias_aviso.
+    Opcionales: proveedor (si falta, cada OC cuenta como proveedor distinto) y flete_mxn (si falta, el de
+    su origen). Devuelve (órdenes, lista de problemas). Si hay problemas, las órdenes son None.
+    """
+    t = tabla.rename(columns=lambda c: _sin_acentos(c).replace(" ", "_"))
+    faltan = [c for c in ("oc_id", "origen", "cabezas", "fecha_embarque") if c not in t]
+    if "fecha_aviso" not in t and "dias_aviso" not in t:
+        faltan.append("fecha_aviso o dias_aviso")
+    if faltan:
+        return None, [f"Faltan columnas: {', '.join(faltan)}."]
+    problemas = []
+    t = t.copy()
+    t["fecha_embarque"] = pd.to_datetime(t["fecha_embarque"], dayfirst=True, errors="coerce", format="mixed")
+    if t["fecha_embarque"].isna().any():
+        problemas.append(f"{int(t['fecha_embarque'].isna().sum())} fechas de embarque no se entienden "
+                         "(usa AAAA-MM-DD o DD/MM/AAAA).")
+    t["fecha_embarque"] = t["fecha_embarque"].dt.date
+    if "fecha_aviso" in t:
+        t["fecha_aviso"] = pd.to_datetime(t["fecha_aviso"], dayfirst=True, errors="coerce", format="mixed").dt.date
+        if t["fecha_aviso"].isna().any():
+            problemas.append(f"{int(t['fecha_aviso'].isna().sum())} fechas de aviso no se entienden.")
+        else:
+            t["dias_aviso"] = [(e - a).days if e and a else 0 for e, a in zip(t["fecha_embarque"], t["fecha_aviso"])]
+    else:
+        t["dias_aviso"] = pd.to_numeric(t["dias_aviso"], errors="coerce")
+        if t["dias_aviso"].isna().any():
+            problemas.append("Hay días de aviso que no son números.")
+        elif not problemas:
+            t["fecha_aviso"] = [e - timedelta(days=int(a)) for e, a in zip(t["fecha_embarque"], t["dias_aviso"])]
+    if "dias_aviso" in t and (pd.to_numeric(t["dias_aviso"], errors="coerce") < 0).any():
+        problemas.append("Hay órdenes avisadas después de su fecha de embarque.")
+    t["cabezas"] = pd.to_numeric(t["cabezas"], errors="coerce")
+    malas = t[t["cabezas"].isna() | (t["cabezas"] <= 0) | (t["cabezas"] > CAPACIDAD_CABEZAS)]
+    if len(malas):
+        problemas.append(f"{len(malas)} órdenes con cabezas fuera de 1 a {CAPACIDAD_CABEZAS} "
+                         f"(por ejemplo {', '.join(map(str, malas['oc_id'].head(3)))}).")
+    t["origen"] = t["origen"].map(lambda o: ALIAS_ORIGEN.get(_sin_acentos(o), o))
+    desconocidos = sorted(set(t["origen"]) - set(FLETE))
+    if desconocidos:
+        problemas.append(f"Orígenes sin distancia por carretera: {', '.join(map(str, desconocidos))}. "
+                         f"Los conocidos son: {', '.join(FLETE)}.")
+    if t["oc_id"].duplicated().any():
+        problemas.append("Hay oc_id repetidos.")
+    if problemas:
+        return None, problemas
+    if "proveedor" not in t:
+        t["proveedor"] = t["oc_id"].astype(str)
+    if "flete_mxn" not in t:
+        t["flete_mxn"] = t["origen"].map(FLETE)
+    t["cabezas"] = t["cabezas"].astype(int)
+    t["dias_aviso"] = t["dias_aviso"].astype(int)
+    columnas = ["oc_id", "proveedor", "origen", "cabezas", "fecha_aviso", "fecha_embarque", "dias_aviso", "flete_mxn"]
+    return t[columnas].sort_values(["fecha_embarque", "oc_id"], kind="stable").reset_index(drop=True), []
 
 
 def del_periodo(ordenes, inicio=INICIO_EVALUACION, semanas=SEMANAS):
@@ -393,15 +464,58 @@ def _pronosticar_semanas(t, entrena_hasta, predice_desde, predice_hasta):
     return objetivo
 
 
-def pronostico(ordenes, inicio=INICIO_EVALUACION, semanas=SEMANAS, semanas_validacion=8):
+SEMANAS_MINIMAS = 20   # historial mínimo para entrenar los modelos (rezagos + 8 de validación)
+
+
+def periodo_de(ordenes):
+    """(lunes de inicio, semanas) del periodo que se compara.
+
+    Con 60 semanas o más de órdenes: las últimas 52 (en el ejemplo, del 3-nov-2025 en adelante).
+    Con menos: la segunda mitad de las semanas; la primera mitad queda como historial.
+    """
+    primera = lunes_de(ordenes["fecha_embarque"].min())
+    ultima = lunes_de(ordenes["fecha_embarque"].max())
+    n = (ultima - primera).days // 7 + 1
+    evalua = SEMANAS if n >= 60 else max(1, math.ceil(n / 2))
+    return ultima - timedelta(weeks=evalua - 1), evalua
+
+
+def _frac_corto(ordenes, inicio):
+    historial = ordenes[ordenes["fecha_embarque"] < inicio]
+    base = historial if len(historial) else ordenes
+    return float((base["dias_aviso"] < ANTICIPACION).mean())
+
+
+def pronostico_sustituto(ordenes, inicio, semanas):
+    """Cuando hay poco historial para entrenar: el promedio de jaulas por semana de todo lo que ya se
+    conoce dos semanas antes (las semanas sin compras cuentan como 0)."""
+    total = tabla_semanal(ordenes).groupby("semana")["y"].sum()
+    previsto = total.shift(2).expanding().mean()
+    fin = inicio + timedelta(weeks=semanas)
+    semanal = pd.DataFrame({"y": total, "prom_hist": previsto.fillna(0)})
+    semanal = semanal[(semanal.index >= inicio) & (semanal.index < fin)]
+    m = metricas(semanal["y"], semanal["prom_hist"]) if semanal["y"].sum() else {"wape": np.nan, "sesgo": np.nan}
+    tabla = pd.DataFrame([{"modelo": "prom_hist", "wape_semana_origen": np.nan, "wape_semana": m["wape"],
+                           "sesgo_semana": m["sesgo"], "wape_validacion": np.nan}])
+    return {"tabla": tabla, "elegido": "prom_hist", "semanal": semanal, "por_origen": None,
+            "frac_corto": _frac_corto(ordenes, inicio), "inicio": inicio, "semanas": semanas, "sustituto": True}
+
+
+def pronostico(ordenes, inicio=None, semanas=None, semanas_validacion=8):
     """Pronóstico de jaulas por semana y origen, igual que src/forecast.py pero por semana.
 
     1. Validación: entrena con el historial menos sus últimas 8 semanas y pronostica esas 8.
        El modelo con menor WAPE del total semanal (lo que sirve para apartar) es el elegido.
-    2. Prueba: entrena con todo el historial y pronostica el año que se compara.
+    2. Prueba: entrena con todo el historial y pronostica el periodo que se compara.
+    Si hay menos de SEMANAS_MINIMAS semanas de historial, usa pronostico_sustituto().
     Devuelve {"tabla": métricas por modelo, "elegido", "semanal": real y previsto por semana,
-              "por_origen": la tabla completa, "frac_corto": OCs avisadas con menos de 7 días}.
+              "por_origen": la tabla completa, "frac_corto": OCs avisadas con menos de 7 días,
+              "inicio" y "semanas" del periodo, "sustituto": si se usó el promedio simple}.
     """
+    if inicio is None:
+        inicio, semanas = periodo_de(ordenes)
+    if (inicio - lunes_de(ordenes["fecha_embarque"].min())).days // 7 < SEMANAS_MINIMAS:
+        return pronostico_sustituto(ordenes, inicio, semanas)
     t = variables_semanales(tabla_semanal(ordenes))
     corte = inicio - timedelta(weeks=semanas_validacion)
     valida = _pronosticar_semanas(t, corte, corte, inicio)
@@ -418,9 +532,8 @@ def pronostico(ordenes, inicio=INICIO_EVALUACION, semanas=SEMANAS, semanas_valid
     tabla = pd.DataFrame(filas)
     elegido = tabla.loc[tabla["wape_validacion"].idxmin(), "modelo"]
     semanal = prueba.groupby("semana")[["y"] + MODELOS_SEMANA].sum()
-    historial = ordenes[ordenes["fecha_embarque"] < inicio]
     return {"tabla": tabla, "elegido": elegido, "semanal": semanal, "por_origen": prueba,
-            "frac_corto": float((historial["dias_aviso"] < ANTICIPACION).mean())}
+            "frac_corto": _frac_corto(ordenes, inicio), "inicio": inicio, "semanas": semanas, "sustituto": False}
 
 
 def cuantil_poisson(alfa, media):
@@ -435,18 +548,24 @@ def cuantil_poisson(alfa, media):
     return k
 
 
-def alfa_apartar(s, ordenes):
-    """Ec. 2 del artículo (vendedor de periódicos): α = costo de que falte ÷ (falte + sobre).
+def costos_apartar(s, ordenes):
+    """(costo de que falte una jaula, costo de que sobre una fletera apartada, costo de un día de espera).
 
-    - Que falte una jaula: el sobrecosto de último momento (0 en este ejemplo) más la espera:
-      con probabilidad p se consigue fletera cada día, así que se espera (1 − p) ÷ p días en promedio,
-      y cada día cuesta la merma de una jaula (cabezas × peso × merma × precio).
+    - Que falte: el sobrecosto de último momento (0 en este ejemplo) más la espera: con probabilidad p se
+      consigue fletera cada día, así que se espera (1 − p) ÷ p días en promedio, y cada día cuesta la merma
+      de una jaula (cabezas promedio × peso × merma × precio).
     - Que sobre: la fracción del flete que se paga por una fletera apartada que no se usa.
     """
     p = max(s["p_fletera"], 0.05)
     costo_dia = ordenes["cabezas"].mean() * s["peso_kg"] * s["merma_dia"] * s["precio_kg"]
     falta = s.get("sobrecosto", 0) + costo_dia * (1 - p) / p
     sobra = s["costo_sin_usar"] * ordenes["flete_mxn"].mean()
+    return falta, sobra, costo_dia
+
+
+def alfa_apartar(s, ordenes):
+    """Ec. 2 del artículo (vendedor de periódicos): α = costo de que falte ÷ (falte + sobre)."""
+    falta, sobra, _ = costos_apartar(s, ordenes)
     return falta / (falta + sobra) if falta + sobra > 0 else 0.5
 
 
@@ -578,26 +697,28 @@ def consolidar(ordenes, km=None, s=BASE):
 
 
 ESCENARIOS_G = {"A": "Despacho actual", "B": "Pronóstico + programación de jaulas",
-                "C": "Pronóstico + programación + ruteo (VRP)", "I": "Ideal de programación"}
+                "C": "Pronóstico + programación + ruteo (VRP)", "D": "Información perfecta"}
 
 
 def comparar(ordenes, s=BASE, pron=None, semilla=SEMILLA, km=None):
-    """Corre A, B, C e ideal sobre el año que se compara. Devuelve {escenario: {resultado, viajes,
-    sin_usar, indicadores}} y el pronóstico (se puede pasar ya calculado para no repetirlo).
+    """Corre A, B, C y D sobre el periodo que se compara. Devuelve {escenario: {resultado, viajes,
+    sin_usar, indicadores}} y el pronóstico (se puede pasar ya calculado para no repetirlo; trae el periodo).
 
-    C = B más juntar lotes chicos con el ruteo. El ideal es el de la programación (sin juntar lotes).
+    C = B más juntar lotes chicos con el ruteo. D = información perfecta: saber desde antes todas las
+    órdenes (el tope de la programación, sin juntar lotes; no es alcanzable).
     """
     pron = pron or pronostico(ordenes)
-    periodo = del_periodo(ordenes)
+    inicio, semanas = pron["inicio"], pron["semanas"]
+    periodo = del_periodo(ordenes, inicio, semanas)
     prevision = pron["semanal"][pron["elegido"]].to_dict()
     con_pronostico = apartar_con_pronostico(prevision, pron["frac_corto"], alfa_apartar(s, ordenes))
     juntas, pares = consolidar(periodo, km, s)
     corridas = {"A": (periodo, apartar_reactivo), "B": (periodo, con_pronostico),
-                "C": (juntas, con_pronostico), "I": (periodo, apartar_ideal)}
+                "C": (juntas, con_pronostico), "D": (periodo, apartar_ideal)}
     salida = {}
     for e, (tabla, regla) in corridas.items():
         resultado, viajes, sin_usar = simular(tabla, regla, s["p_fletera"], semilla)
         salida[e] = {"resultado": resultado, "viajes": viajes, "sin_usar": sin_usar,
-                     "indicadores": indicadores(resultado, sin_usar, s)}
+                     "indicadores": indicadores(resultado, sin_usar, s, inicio, semanas)}
     salida["C"]["pares"] = pares
     return salida, pron
