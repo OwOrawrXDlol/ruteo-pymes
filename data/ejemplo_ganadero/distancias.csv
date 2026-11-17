@@ -1,0 +1,57 @@
+desde,hasta,km,horas
+"Engorda (Cardel, Ver.)",Balancán,723.53,9.42
+"Engorda (Cardel, Ver.)",Tenosique,708.64,8.81
+"Engorda (Cardel, Ver.)",Villahermosa,498.05,5.84
+"Engorda (Cardel, Ver.)",Emiliano Zapata,658.29,8.14
+"Engorda (Cardel, Ver.)",Palenque/Ocosingo,678.64,8.49
+"Engorda (Cardel, Ver.)",Pichucalco,541.53,6.81
+"Engorda (Cardel, Ver.)",Medellín,49.28,0.6
+Balancán,"Engorda (Cardel, Ver.)",723.87,9.35
+Balancán,Tenosique,67.87,1.53
+Balancán,Villahermosa,227.14,3.61
+Balancán,Emiliano Zapata,88.0,2.03
+Balancán,Palenque/Ocosingo,120.88,2.65
+Balancán,Pichucalco,279.98,4.55
+Balancán,Medellín,689.62,8.97
+Tenosique,"Engorda (Cardel, Ver.)",709.03,8.78
+Tenosique,Balancán,67.85,1.53
+Tenosique,Villahermosa,212.3,3.04
+Tenosique,Emiliano Zapata,53.1,0.96
+Tenosique,Palenque/Ocosingo,53.66,1.15
+Tenosique,Pichucalco,265.14,3.98
+Tenosique,Medellín,674.78,8.4
+Villahermosa,"Engorda (Cardel, Ver.)",498.07,5.78
+Villahermosa,Balancán,226.88,3.63
+Villahermosa,Tenosique,211.99,3.03
+Villahermosa,Emiliano Zapata,161.64,2.35
+Villahermosa,Palenque/Ocosingo,181.99,2.7
+Villahermosa,Pichucalco,77.49,1.21
+Villahermosa,Medellín,463.82,5.4
+Emiliano Zapata,"Engorda (Cardel, Ver.)",658.78,8.11
+Emiliano Zapata,Balancán,87.92,2.03
+Emiliano Zapata,Tenosique,53.2,0.97
+Emiliano Zapata,Villahermosa,162.05,2.37
+Emiliano Zapata,Palenque/Ocosingo,61.58,1.38
+Emiliano Zapata,Pichucalco,214.89,3.31
+Emiliano Zapata,Medellín,624.53,7.73
+Palenque/Ocosingo,"Engorda (Cardel, Ver.)",680.01,8.47
+Palenque/Ocosingo,Balancán,120.87,2.65
+Palenque/Ocosingo,Tenosique,53.76,1.15
+Palenque/Ocosingo,Villahermosa,183.28,2.72
+Palenque/Ocosingo,Emiliano Zapata,61.58,1.38
+Palenque/Ocosingo,Pichucalco,236.12,3.66
+Palenque/Ocosingo,Medellín,645.76,8.09
+Pichucalco,"Engorda (Cardel, Ver.)",542.32,6.78
+Pichucalco,Balancán,275.33,4.54
+Pichucalco,Tenosique,260.45,3.94
+Pichucalco,Villahermosa,77.97,1.25
+Pichucalco,Emiliano Zapata,210.1,3.26
+Pichucalco,Palenque/Ocosingo,230.45,3.62
+Pichucalco,Medellín,508.07,6.4
+Medellín,"Engorda (Cardel, Ver.)",49.6,0.6
+Medellín,Balancán,690.37,9.04
+Medellín,Tenosique,675.48,8.44
+Medellín,Villahermosa,464.9,5.47
+Medellín,Emiliano Zapata,625.13,7.76
+Medellín,Palenque/Ocosingo,645.48,8.12
+Medellín,Pichucalco,508.37,6.44

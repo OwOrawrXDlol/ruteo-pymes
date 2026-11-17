@@ -37,7 +37,8 @@ def test_app_abre_con_datos_de_ejemplo():
     columnas = [list(d.value.columns) for d in rutas.dataframe]
     assert any("Orden de visita" in c for c in columnas)  # camionetas de la propuesta
     assert any("Como se hace hoy (E1)" in c for c in columnas)  # los 4 escenarios del día (antes 📊 y 📈)
-    assert [t.label for t in app.tabs] == ["💰 Ahorro", "🗺️ Rutas de un día", "📂 Mis datos", "🚦 Tráfico (demo)"]
+    assert [t.label for t in app.tabs] == ["💰 Ahorro", "🗺️ Rutas de un día", "📂 Mis datos", "🚦 Tráfico (demo)",
+                                             "🐄 Rancho Ramada"]
 
 
 def test_app_calcula_un_rango():

@@ -18,6 +18,7 @@ import interfaz
 import vista_ahorro
 import vista_config
 import vista_datos
+import vista_ganadero
 import vista_trafico
 from src.tomtom import ClienteTomTom, leer_clave
 
@@ -290,8 +291,14 @@ UN, UN1 = config["negocio"]["unidad"], config["negocio"]["unidad_singular"]  # p
 lugar_encabezado = st.container()  # el aviso único; se llena cuando ya se sabe qué datos se usan
 
 # Pestañas "perezosas": solo se calcula la que está abierta (las rutas de un día tardan unos segundos)
-PESTANAS = ["💰 Ahorro", "🗺️ Rutas de un día", "📂 Mis datos", "🚦 Tráfico (demo)"]
-pestana_ahorro, pestana_dia, pestana_datos, pestana_trafico = st.tabs(PESTANAS, key="pestana", on_change="rerun")
+PESTANAS = ["💰 Ahorro", "🗺️ Rutas de un día", "📂 Mis datos", "🚦 Tráfico (demo)", "🐄 Rancho Ramada"]
+pestana_ahorro, pestana_dia, pestana_datos, pestana_trafico, pestana_rancho = st.tabs(
+    PESTANAS, key="pestana", on_change="rerun")
+
+# 🐄 Rancho Ramada no depende de los datos de las demás pestañas: se dibuja antes de revisarlos
+if pestana_rancho.open:
+    with pestana_rancho:
+        vista_ganadero.pagina()
 
 # 📂 Mis datos se dibuja siempre, para que los archivos subidos no se pierdan al cambiar de pestaña
 with pestana_datos:
